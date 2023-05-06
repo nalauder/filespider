@@ -1,0 +1,7 @@
+hello world
+this is a file 
+In this file I have some credentials
+my username is nick
+my password is banana
+I hope no one can hack these
+hehe shhh
