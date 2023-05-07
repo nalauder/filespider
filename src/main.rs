@@ -1,6 +1,6 @@
-use regex::Regex;
-use std::fs;
 use clap::Parser;
+use regex::Regex;
+use std::{fs, path::PathBuf};
 
 fn pattern_builder(
     string_to_match: String,
@@ -22,14 +22,33 @@ fn load_file(file_path: &String) -> String {
 
 fn parse_path(path: &String, files: &mut Vec<std::path::PathBuf>) {
     if fs::metadata(path).unwrap().is_file() {
-        files.push(
-            fs::canonicalize(path)
-                .unwrap()
-        );
+        files.push(fs::canonicalize(path).unwrap());
     } else {
-        let paths = fs::read_dir(path).unwrap();
+        let paths: fs::ReadDir = fs::read_dir(path).unwrap();
         for path_obj in paths {
-            parse_path(&path_obj.unwrap().path().to_str().unwrap().to_string(), files)
+            parse_path(
+                &path_obj.unwrap().path().to_str().unwrap().to_string(),
+                files,
+            )
+        }
+    }
+}
+
+fn match_in_file(file: PathBuf, regex_pattern: &Regex, print_line: bool) {
+    let path_name: String = file.into_os_string().into_string().unwrap();
+    let file_contents: String = load_file(&path_name);
+
+    for (i, l) in file_contents.lines().enumerate() {
+        let matched: Option<regex::Match> = regex_pattern.find(l);
+
+        if matched.is_some() {
+            let match_obj = matched.unwrap();
+            if print_line {
+                println!("{}:{} - {}", path_name, i+1, match_obj.as_str());
+            } else {
+                println!("{} - {}", path_name, match_obj.as_str());
+            }
+            
         }
     }
 }
@@ -47,29 +66,27 @@ struct Parameters {
     #[arg(short = 'B', long, default_value_t = 0)]
     next_lines: u32,
 
-    #[arg(short = 'c', long, default_value_t = false)]
-    match_case: bool,
+    #[arg(short = 'i', default_value_t = false, action)]
+    ignore_case: bool,
+
+    #[arg(short = 'n', default_value_t = false, action)]
+    print_line_number: bool,
 }
 
 fn main() {
+    let args: Parameters = Parameters::parse();
 
-    let args = Parameters::parse();
-
-    let regex_pattern = pattern_builder(args.pattern, args.prev_lines, args.next_lines, args.match_case);
+    let regex_pattern: Regex = pattern_builder(
+        args.pattern,
+        args.prev_lines,
+        args.next_lines,
+        args.ignore_case,
+    );
 
     let mut files: Vec<std::path::PathBuf> = Vec::new();
     parse_path(&args.file_path, &mut files);
 
     for file in files {
-        let path_name:String = file.into_os_string().into_string().unwrap();
-        let file_contents: String = load_file(&path_name);
-
-        let matched = regex_pattern.find(&file_contents);
-    
-        if matched.is_some() {
-            println!("{} - {}", path_name, matched.unwrap().as_str());
-        } else {
-            println!("No match!");
-        }
+        match_in_file(file, &regex_pattern, args.print_line_number);
     }
 }
