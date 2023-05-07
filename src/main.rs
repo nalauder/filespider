@@ -16,41 +16,57 @@ fn pattern_builder(
     Regex::new(&search_pattern).unwrap()
 }
 
-fn load_file(file_path: &String) -> String {
-    fs::read_to_string(file_path).expect("Cannot read file")
+fn load_file(file_path: &String) -> Result<String, std::io::Error> {
+    let file = fs::read_to_string(file_path)?;
+    Ok(file)
 }
 
 fn parse_path(path: &String, files: &mut Vec<std::path::PathBuf>) {
-    if fs::metadata(path).unwrap().is_file() {
-        files.push(fs::canonicalize(path).unwrap());
-    } else {
-        let paths: fs::ReadDir = fs::read_dir(path).unwrap();
-        for path_obj in paths {
-            parse_path(
-                &path_obj.unwrap().path().to_str().unwrap().to_string(),
-                files,
-            )
+    let file = fs::metadata(path);
+    if file.is_ok() {
+        if file.unwrap().is_file() {
+            files.push(fs::canonicalize(path).unwrap());
+        } else {       
+            match fs::read_dir(path) {
+                Ok(paths) => {
+                    for path_obj in paths {
+                        parse_path(
+                            &path_obj.unwrap().path().to_str().unwrap().to_string(),
+                            files,
+                        )
+                    }
+                },
+                Err(_) => println!("Error opening file - {}", path),
+            }
         }
+    } else {
+        println!("File not found - {}", path);   
     }
 }
 
 fn match_in_file(file: PathBuf, regex_pattern: &Regex, print_line: bool) {
     let path_name: String = file.into_os_string().into_string().unwrap();
-    let file_contents: String = load_file(&path_name);
-
-    for (i, l) in file_contents.lines().enumerate() {
-        let matched: Option<regex::Match> = regex_pattern.find(l);
-
-        if matched.is_some() {
-            let match_obj = matched.unwrap();
-            if print_line {
-                println!("{}:{} - {}", path_name, i+1, match_obj.as_str());
-            } else {
-                println!("{} - {}", path_name, match_obj.as_str());
+    
+    match load_file(&path_name) {
+        Ok(file_contents) => {
+            for (i, l) in file_contents.lines().enumerate() {
+                let matched: Option<regex::Match> = regex_pattern.find(l);
+        
+                if matched.is_some() {
+                    let match_obj = matched.unwrap();
+                    if print_line {
+                        println!("{}:{} - {}", path_name, i+1, match_obj.as_str());
+                    } else {
+                        println!("{} - {}", path_name, match_obj.as_str());
+                    }
+                    
+                }
             }
-            
-        }
+        },
+        Err(_) => return,
     }
+
+    
 }
 
 #[derive(Parser)]
