@@ -13,35 +13,62 @@ fn pattern_builder(
         "{case_flag}(?:.*\\n){{0,{prev_lines}}}.*{string_to_match}.*(?:\\n.*){{0,{next_lines}}}"
     );
 
-    Regex::new(&search_pattern).unwrap()
+    Regex::new(&search_pattern).expect("Cannot create regular expression!")
 }
 
-fn load_file(file_path: &PathBuf) -> Result<String, std::io::Error> {
-    let file = fs::read_to_string(file_path)?;
+fn load_file(file_path: &PathBuf, verbose: bool) -> Result<String, std::io::Error> {
+    let file: String = match fs::read_to_string(file_path) {
+        Ok(file) => file,
+        Err(error) => {
+            if verbose {
+                eprintln!(
+                    "Error loading file \"{}\" - {}",
+                    file_path.to_str().unwrap(),
+                    error.to_string()
+                );
+            }
+            return Err(error);
+        }
+    };
     Ok(file)
 }
 
-fn identify_files_local(path: PathBuf) -> Result<Vec<PathBuf>, std::io::Error> {
+fn identify_files_local(path: PathBuf, verbose: bool) -> Result<Vec<PathBuf>, std::io::Error> {
     let mut files: Vec<PathBuf> = Vec::new();
     let file: fs::Metadata = fs::metadata(&path)?;
 
     if file.is_file() {
         files.push(fs::canonicalize(path)?);
-    } else {
-        let paths: fs::ReadDir = fs::read_dir(path)?;
-        for path_obj in paths {
-            let mut new_files: Vec<PathBuf> = identify_files_local(path_obj.unwrap().path())?;
-            files.append(&mut new_files);
+    } else if file.is_dir() {
+        match fs::read_dir(&path) {
+            Ok(paths) => {
+                for path_obj in paths {
+                    match identify_files_local(path_obj.unwrap().path(), verbose) {
+                        Ok(new_files) => files.extend(new_files),
+                        Err(_) => continue,
+                    };
+                }
+            }
+            Err(error) => {
+                if verbose {
+                    eprintln!(
+                        "Error reading directory \"{}\" - {}",
+                        path.to_str().unwrap(),
+                        error.to_string()
+                    );
+                }
+                return Err(error);
+            }
         }
     }
 
     Ok(files)
 }
 
-fn match_in_file(file: &PathBuf, regex_pattern: &Regex, print_line_num: bool) {
+fn match_in_file(file: &PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
     let path_name = file.to_str().unwrap();
 
-    let file_contents = load_file(&file);
+    let file_contents = load_file(&file, verbose);
 
     if file_contents.is_ok() {
         for (i, l) in file_contents.unwrap().lines().enumerate() {
@@ -77,6 +104,9 @@ struct Parameters {
 
     #[arg(short = 'n', default_value_t = false, action)]
     print_line_number: bool,
+
+    #[arg(short = 'v', default_value_t = false, action)]
+    verbose: bool,
 }
 
 fn main() {
@@ -89,11 +119,10 @@ fn main() {
         args.ignore_case,
     );
 
-    let files = identify_files_local(args.file_path);
+    let files =
+        identify_files_local(args.file_path, args.verbose).expect("Failed to read initial path");
 
-    if files.is_ok() {
-        for file in files.unwrap() {
-            match_in_file(&file, &regex_pattern, args.print_line_number);
-        }
+    for file in files {
+        match_in_file(&file, &regex_pattern, args.print_line_number, args.verbose);
     }
 }
