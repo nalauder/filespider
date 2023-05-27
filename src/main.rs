@@ -33,20 +33,17 @@ fn load_file(file_path: &PathBuf, verbose: bool) -> Result<String, std::io::Erro
     Ok(file)
 }
 
-fn identify_files_local(path: PathBuf, verbose: bool) -> Result<Vec<PathBuf>, std::io::Error> {
-    let mut files: Vec<PathBuf> = Vec::new();
-    let file: fs::Metadata = fs::metadata(&path)?;
+fn identify_files_local(path: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
+    let file: fs::Metadata = fs::metadata(&path).expect("Cannot read file metadata!");
 
     if file.is_file() {
-        files.push(fs::canonicalize(path)?);
+        let full_path = fs::canonicalize(path).expect("Cannot canonicalize path!");
+        match_in_file(full_path, regex_pattern, print_line_num, verbose);
     } else if file.is_dir() {
         match fs::read_dir(&path) {
             Ok(paths) => {
                 for path_obj in paths {
-                    match identify_files_local(path_obj.unwrap().path(), verbose) {
-                        Ok(new_files) => files.extend(new_files),
-                        Err(_) => continue,
-                    };
+                    identify_files_local(path_obj.expect("Cannot read directory children!").path(), regex_pattern, print_line_num, verbose)
                 }
             }
             Err(error) => {
@@ -57,15 +54,13 @@ fn identify_files_local(path: PathBuf, verbose: bool) -> Result<Vec<PathBuf>, st
                         error.to_string()
                     );
                 }
-                return Err(error);
             }
         }
     }
 
-    Ok(files)
 }
 
-fn match_in_file(file: &PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
+fn match_in_file(file: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
     let path_name = file.to_str().unwrap();
 
     let file_contents = load_file(&file, verbose);
@@ -119,10 +114,5 @@ fn main() {
         args.ignore_case,
     );
 
-    let files =
-        identify_files_local(args.file_path, args.verbose).expect("Failed to read initial path");
-
-    for file in files {
-        match_in_file(&file, &regex_pattern, args.print_line_number, args.verbose);
-    }
+    identify_files_local(args.file_path, &regex_pattern, args.print_line_number, args.verbose);
 }
