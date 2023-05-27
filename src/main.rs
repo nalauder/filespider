@@ -34,7 +34,20 @@ fn load_file(file_path: &PathBuf, verbose: bool) -> Result<String, std::io::Erro
 }
 
 fn identify_files_local(path: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
-    let file: fs::Metadata = fs::metadata(&path).expect("Cannot read file metadata!");
+    let file: fs::Metadata = match fs::metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            if verbose {
+                eprintln!(
+                    "Cannot read path metadata - {} - {}",
+                    path.to_str().unwrap(),
+                    error.to_string()
+                );
+            }
+
+            return;
+        }
+    };
 
     if file.is_file() {
         let full_path = fs::canonicalize(path).expect("Cannot canonicalize path!");
@@ -43,7 +56,12 @@ fn identify_files_local(path: PathBuf, regex_pattern: &Regex, print_line_num: bo
         match fs::read_dir(&path) {
             Ok(paths) => {
                 for path_obj in paths {
-                    identify_files_local(path_obj.expect("Cannot read directory children!").path(), regex_pattern, print_line_num, verbose)
+                    identify_files_local(
+                        path_obj.expect("Cannot read directory children!").path(),
+                        regex_pattern,
+                        print_line_num,
+                        verbose,
+                    )
                 }
             }
             Err(error) => {
@@ -57,7 +75,6 @@ fn identify_files_local(path: PathBuf, regex_pattern: &Regex, print_line_num: bo
             }
         }
     }
-
 }
 
 fn match_in_file(file: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
@@ -114,5 +131,10 @@ fn main() {
         args.ignore_case,
     );
 
-    identify_files_local(args.file_path, &regex_pattern, args.print_line_number, args.verbose);
+    identify_files_local(
+        args.file_path,
+        &regex_pattern,
+        args.print_line_number,
+        args.verbose,
+    );
 }
