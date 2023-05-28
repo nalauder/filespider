@@ -33,6 +33,38 @@ fn load_file(file_path: &PathBuf, verbose: bool) -> Result<String, std::io::Erro
     Ok(file)
 }
 
+fn handle_type_file(path: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
+    let full_path = fs::canonicalize(path).expect("Cannot canonicalize path!");
+    match_in_file(full_path, regex_pattern, print_line_num, verbose);
+    // load_file(full_path, verbose);
+
+
+}
+
+fn handle_type_dir(path: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
+    match fs::read_dir(&path) {
+        Ok(paths) => {
+            for path_obj in paths {
+                identify_files_local(
+                    path_obj.expect("Cannot read directory children!").path(),
+                    regex_pattern,
+                    print_line_num,
+                    verbose,
+                )
+            }
+        }
+        Err(error) => {
+            if verbose {
+                eprintln!(
+                    "Error reading directory \"{}\" - {}",
+                    path.to_str().unwrap(),
+                    error.to_string()
+                )
+            }
+        }
+    }
+}
+
 fn identify_files_local(path: PathBuf, regex_pattern: &Regex, print_line_num: bool, verbose: bool) {
     let file: fs::Metadata = match fs::metadata(&path) {
         Ok(metadata) => metadata,
@@ -50,30 +82,9 @@ fn identify_files_local(path: PathBuf, regex_pattern: &Regex, print_line_num: bo
     };
 
     if file.is_file() {
-        let full_path = fs::canonicalize(path).expect("Cannot canonicalize path!");
-        match_in_file(full_path, regex_pattern, print_line_num, verbose);
+        handle_type_file(path, regex_pattern, print_line_num, verbose)
     } else if file.is_dir() {
-        match fs::read_dir(&path) {
-            Ok(paths) => {
-                for path_obj in paths {
-                    identify_files_local(
-                        path_obj.expect("Cannot read directory children!").path(),
-                        regex_pattern,
-                        print_line_num,
-                        verbose,
-                    )
-                }
-            }
-            Err(error) => {
-                if verbose {
-                    eprintln!(
-                        "Error reading directory \"{}\" - {}",
-                        path.to_str().unwrap(),
-                        error.to_string()
-                    );
-                }
-            }
-        }
+        handle_type_dir(path, regex_pattern, print_line_num, verbose)
     }
 }
 
